@@ -12,6 +12,7 @@ Production base URL: `https://api.thaipbs.net`
 
 - `now`
 - `news`
+- `locals`
 - `verify`
 - `theactive`
 - `decode`
@@ -33,8 +34,12 @@ Production base URL: `https://api.thaipbs.net`
   - default: `1`
 - `limit` (optional, integer)
   - default: `20`
-- `tag` (optional, string)
+- `tag` (optional, string | string[])
   - ใช้กรองตามชื่อแท็ก/แฮชแท็ก
+  - รองรับการส่งหลายค่าได้ 2 รูปแบบ:
+    - comma-separated: `tag=AI,เทคโนโลยี,อวกาศ`
+    - repeated params: `tag=AI&tag=เทคโนโลยี&tag=อวกาศ`
+  - เมื่อส่งหลายค่า ระบบจะคืนรายการที่มีแท็กตรงกับ **อย่างน้อยหนึ่งค่า** (OR)
 - `section` (optional, string)
   - ใช้กรองหมวด/หมวดข่าว (แล้วแต่ `site`)
 - `categoryId` (optional, integer as string)
@@ -85,7 +90,7 @@ Production base URL: `https://api.thaipbs.net`
 | ชื่อ | ความหมาย |
 |------|----------|
 | `CategoryItem` | `{ "id": number \| null, "title": string, "slug": string \| null, "url": string \| null }` |
-| `TagItem` | `{ "title": string, "url": string \| null }` |
+| `TagItem` | `{ "title": string, "slug"?: string \| null, "url": string \| null }` |
 | `AuthorItem` | `{ "id": number \| null, "name": string, "description": string, "url": string \| null, "avatar": string \| null }` |
 
 **ฟิลด์พื้นฐาน (ทุก `site`)**
@@ -117,13 +122,17 @@ Production base URL: `https://api.thaipbs.net`
 
 **`now`**
 
-ไม่มีฟิลด์เพิ่มนอกตารางพื้นฐาน — หมายเหตุที่มา: `categories` สูงสุดหนึ่งหมวดจาก relation ของ Now, `tags` ลิงก์ไป `/tags?q=...`
+ไม่มีฟิลด์เพิ่มนอกตารางพื้นฐาน — หมายเหตุที่มา: `categories` สูงสุดหนึ่งหมวดจาก relation ของ Now (มี `slug`/`url` เป็น canonical path หมวด เช่น `/now/categories/{slug}`), `tags` ลิงก์ไป `/tags?q=...`
 
 **`news`**
 
 | Field | คำอธิบาย |
 |-------|----------|
 | *(อื่น ๆ)* | มี field เพิ่มจาก **onecms** ผ่าน `...restItem` (เช่น `image`, `media` แบบเต็ม ฯลฯ) — **ไม่รวม `content`** (ถูกตัดก่อน merge) |
+
+**`locals`**
+
+หมายเหตุที่มา: ข้อมูลจาก `locals` (`strapi`) โดย `restUrl` จะเป็น **slug-only** ในรูป `/v1/locals/posts/:slug`, `canonical` ของโพสต์เป็น `/locals/contents/{slug}`, `tags` มี `slug` แบบ WordPress-style และ `tags.url` เป็น `/locals/contents?tagId={id}` และมี `zones` (รูปแบบเดียวกับ categories/tags) โดย `zones.url` เป็น `/locals/contents?zoneId={id}`
 
 **`verify`**
 
@@ -221,6 +230,18 @@ List `now`
 curl "https://api.thaipbs.net/v1/now/posts?page=1&limit=20&tag=PM2.5&categoryId=8"
 ```
 
+List `now` (หลาย tag แบบ comma-separated)
+
+```bash
+curl "https://api.thaipbs.net/v1/now/posts?page=1&limit=20&tag=AI,เทคโนโลยี,อวกาศ,วิทยาศาสตร์,เทรนด์,โลกและสิ่งแวดล้อม,Thai%20Genius"
+```
+
+List `news` (หลาย tag แบบ repeated params)
+
+```bash
+curl "https://api.thaipbs.net/v1/news/posts?page=1&limit=20&tag=AI&tag=เทคโนโลยี&tag=อวกาศ"
+```
+
 List `verify` (เลือก Type)
 
 ```bash
@@ -257,13 +278,21 @@ List `policywatch` (เลือก Type)
 curl "https://api.thaipbs.net/v1/policywatch/posts?type=article&page=1&limit=20"
 ```
 
+List `locals`
+
+```bash
+curl "https://api.thaipbs.net/v1/locals/posts?page=1&limit=20&tag=PM2.5"
+```
+
 ---
 
-## 2) Get a post by id
+## 2) Get a post by id / slug
 
 ### `GET /v1/:site/posts/:id`
 
 ดึงรายละเอียดโพสต์แต่ละรายการ
+
+> สำหรับ `locals` ค่าพารามิเตอร์ `:id` จะต้องเป็น **slug** (ไม่ใช่เลข id) เช่น `/v1/locals/posts/wwlj8ohrpo0h2zoaxexfro8y-...`
 
 #### Query params
 
@@ -274,6 +303,7 @@ curl "https://api.thaipbs.net/v1/policywatch/posts?type=article&page=1&limit=20"
   - `org`: ใช้เลือก Type ตาม WP post types: `post`, `gallery`, `committee`, `staff-member`, `procurement`, `careers`, `annual_report`, `programs`, `faq` (default = `post`)
   - `policywatch`: ใช้เลือก Type ตาม WP post types: `article`, `short_clip`, `activity`, `policy`, `localpolicies`, `agenda-policy`, `video`, `live`, `forum` (default = `article`)
   - `world`: ส่ง `type` ได้ (optional) เพื่อช่วยให้ query filter ตรงกับชนิดคอนเทนต์
+  - `locals`: ไม่ใช้ query พิเศษ (slug อยู่ใน path)
 
 #### Response
 
@@ -333,4 +363,131 @@ curl "https://api.thaipbs.net/v1/policywatch/posts/38608?type=article"
 ```
 
 ---
+
+## 3) Policywatch Policies (special)
+
+### `GET /v1/policywatch/policies`
+
+ดึงรายการ Policy ของ `policywatch` โดยใช้ post type `policy` โดยตรง
+
+#### Query params
+
+- `page` (optional, integer, default `1`)
+- `limit` (optional, integer, default `20`)
+- `tag` (optional) กรองจาก taxonomy `hashtag`
+- `section` (optional) กรองจาก taxonomy `policy-cat`
+- `includeContent` (optional: `1`/`true`) ให้ส่ง `content` ใน list
+
+#### Response
+
+โครงหลักจะเหมือน list `posts` ของ policywatch และเพิ่มฟิลด์พิเศษ:
+
+- `slug`
+- `acf` (object จาก upstream เพื่อเก็บ field พิเศษทั้งหมด)
+
+#### Example
+
+```bash
+curl "https://api.thaipbs.net/v1/policywatch/policies?page=1&limit=20&section=economy"
+```
+
+### `GET /v1/policywatch/policies/:slug`
+
+ดึงรายละเอียด Policy รายชิ้นด้วย `slug` (ไม่ใช้ id)
+
+#### Response
+
+โครงหลักจะเหมือน detail `posts` ของ policywatch และเพิ่มฟิลด์:
+
+- `slug`
+- `acf` (object จาก upstream)
+
+#### Example
+
+```bash
+curl "https://api.thaipbs.net/v1/policywatch/policies/finance-101"
+```
+
+---
+
+## 4) Categories
+
+### `GET /v1/:site/categories`
+
+ดึงรายการหมวดหมู่ของแต่ละ `site` (รองรับปัจจุบัน: `news`, `now`, `locals`, `verify`, `theactive`, `decode`, `world`, `org`, `policywatch`)
+
+#### Query params
+
+- `page` (optional, integer)
+  - default: `1`
+- `limit` (optional, integer)
+  - default: `20`
+
+#### Response
+
+ตอบกลับรูปแบบ pagination เดียวกับ posts:
+
+- `minTs`
+- `Ts`
+- `page`
+- `total`
+- `totalPages`
+- `data`
+
+โดยแต่ละรายการใน `data` มีฟิลด์:
+
+- `id`
+- `title`
+- `slug`
+- `canonical`
+
+หมายเหตุ: `canonical` ใน endpoint categories จะคืนเป็น path (ไม่มี domain) เช่น `locals` จะเป็น `/locals/contents?categoryId={id}`
+
+#### Example
+
+```bash
+curl "https://api.thaipbs.net/v1/news/categories?page=1&limit=10"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/now/categories?page=1&limit=10"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/locals/categories?page=1&limit=10"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/verify/categories?page=1&limit=10"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/theactive/categories?page=1&limit=10"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/decode/categories?page=1&limit=10"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/world/categories?page=1&limit=10"
+```
+
+หมายเหตุ: สำหรับ `world` ค่า `canonical` ของ categories จะเป็นรูปแบบ `/{slug}`
+
+```bash
+curl "https://api.thaipbs.net/v1/org/categories?page=1&limit=10"
+```
+
+หมายเหตุ: สำหรับ `org` ค่า `canonical` ของ categories จะเป็นรูปแบบ `/org/category/{slug}`
+
+```bash
+curl "https://api.thaipbs.net/v1/policywatch/categories?page=1&limit=10"
+```
+
+หมายเหตุ: สำหรับ `policywatch` endpoint นี้ใช้หมวดของบทความ (`article-cat`) และค่า `canonical` จะเป็น `/category/{slug}`
+
+หมายเหตุ: สำหรับ `verify` ค่า `canonical` ของ categories แยกตามชนิดหมวด:
+- `category-verify` -> `/verify/category/{slug}`
+- `category-article` -> `/verify/article/{slug}`
 
