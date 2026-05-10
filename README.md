@@ -422,6 +422,13 @@ curl "https://api.thaipbs.net/v1/policywatch/policies/finance-101"
   - default: `1`
 - `limit` (optional, integer)
   - default: `20`
+- `id` (optional, integer as string)
+  - กรอง category ที่มี `id` ตรงกับค่าที่ส่ง — ถ้าเจอจะตอบกลับเป็น `data` ที่มี 1 รายการ, ถ้าไม่เจอ `data` เป็น array ว่าง
+  - เมื่อส่ง `id` จะไม่ทำ pagination (`page` = 1, `total` = 0 หรือ 1)
+- `slug` (optional, string)
+  - กรอง category ที่มี `slug` (case-insensitive) ตรงกับค่าที่ส่ง — ถ้าไม่เจอจาก `slug` จะลอง fallback เทียบกับ `title` ให้อัตโนมัติ
+  - เมื่อส่ง `slug` จะไม่ทำ pagination เช่นเดียวกัน
+  - หากส่งทั้ง `id` และ `slug` ระบบจะถือว่า match เมื่อ "ตรงอย่างใดอย่างหนึ่ง" (`OR`)
 
 #### Response
 
@@ -490,4 +497,141 @@ curl "https://api.thaipbs.net/v1/policywatch/categories?page=1&limit=10"
 หมายเหตุ: สำหรับ `verify` ค่า `canonical` ของ categories แยกตามชนิดหมวด:
 - `category-verify` -> `/verify/category/{slug}`
 - `category-article` -> `/verify/article/{slug}`
+
+ตัวอย่างกรองด้วย `slug` หรือ `id`:
+
+```bash
+curl "https://api.thaipbs.net/v1/theactive/categories?slug=news"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/theactive/categories?id=18"
+```
+
+### `GET /v1/:site/categories/:id`
+
+ดึง category รายการเดียวด้วย path param
+
+- `:id` รับเป็นได้ทั้ง **id ตัวเลข** หรือ **slug** (รองรับ slug ภาษาไทย / percent-encoded)
+- ถ้า `:id` เป็นตัวเลข ระบบจะลองหาด้วย `id` ก่อน, หากไม่เจอจะลองตีความเป็น `slug` ให้อัตโนมัติ
+- ถ้าไม่เป็นตัวเลขจะถือว่าเป็น `slug` ตรง ๆ
+
+#### Response
+
+- ถ้าเจอ → ตอบกลับเป็น object ของ category รายการเดียว `{ id, title, slug, canonical }`
+- ถ้าไม่เจอ → `404 { "message": "Category not found" }`
+
+#### Example
+
+```bash
+curl "https://api.thaipbs.net/v1/theactive/categories/18"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/theactive/categories/news"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/policywatch/categories/economy"
+```
+
+---
+
+## 5) Tags
+
+### `GET /v1/:site/tags`
+
+ดึงรายการแท็ก/แฮชแท็กของแต่ละ `site` (รองรับปัจจุบัน: `news`, `now`, `locals`, `verify`, `theactive`, `decode`, `world`, `org`, `policywatch`)
+
+#### Query params
+
+- `page` (optional, integer)
+  - default: `1`
+- `limit` (optional, integer)
+  - default: `20`
+- `id` (optional, integer as string)
+  - กรอง tag ที่มี `id` ตรงกับค่าที่ส่ง — `data` จะมี 0 หรือ 1 รายการ
+  - ใช้กับ `news`, `world` ไม่ได้ (ต้นทางไม่มี id ของ tag)
+- `slug` (optional, string)
+  - กรอง tag ที่มี `slug` ตรงกับค่าที่ส่ง — สำหรับ site ที่ไม่มี `slug` แท้ ๆ ระบบจะ fallback ไปจับคู่กับ `title` (case-insensitive) ให้อัตโนมัติ
+
+#### Response
+
+โครงสร้างเดียวกับ categories:
+
+- `minTs`, `Ts`, `page`, `total`, `totalPages`, `data`
+
+โดยแต่ละรายการใน `data` มีฟิลด์:
+
+- `id` (อาจเป็น `null` สำหรับ `news`/`world`)
+- `title`
+- `slug` (อาจเป็น `null` สำหรับชื่อภาษาไทยที่ slugify แล้วเป็นค่าว่าง)
+- `canonical` (path; ไม่มี domain ยกเว้น `world` ซึ่งใช้ search URL เต็ม)
+
+#### หมายเหตุที่มาของแท็ก ต่อ `site`
+
+| Site | ต้นทาง | URL ของ tag (`canonical`) |
+|------|--------|----------------------------|
+| `news` | รวมจากแท็กในข่าวล่าสุดของ onecms | `/tags?q={tag}` |
+| `now` | Strapi `/api/tags` (paginate ผ่าน `pagination[page]`/`pagination[pageSize]`) | `/now/tags/{slug}` |
+| `locals` | Strapi `/strapi/api/contents/{documentId}` รวมจาก content ล่าสุด (endpoint `/api/tags` ของ Strapi ถูกซ่อน) | `/locals/contents?tagId={id}` |
+| `verify` | WordPress taxonomy `hashtag` ของ verify | `/verify/tag/{name}` |
+| `theactive` | WordPress taxonomy `post_tag` ของ theactive | `/tag/{slug}` |
+| `decode` | WordPress taxonomy `post_tag` ของ decode | `/tag/{slug}/` |
+| `world` | รวมจากฟิลด์ `tag` บน content ล่าสุดของ world (ต้นทางไม่มี endpoint master tag) | `https://world.thaipbs.or.th/search?search={tag}` |
+| `org` | WordPress taxonomy `post_tag` ของ org | `/tag/{slug}/` |
+| `policywatch` | WordPress taxonomy `hashtag` ของ policywatch | `/tag/{slug}/` |
+
+> สำหรับ site ที่ต้องอ่านเป็น sample (`news`, `locals`, `world`) ระบบจะดึงจาก content ล่าสุดและ deduplicate ก่อนทำ pagination ใน-memory ดังนั้น `total` จะสะท้อนเฉพาะ tag ที่อยู่ใน sample เท่านั้น
+
+#### Example
+
+```bash
+curl "https://api.thaipbs.net/v1/theactive/tags?page=1&limit=20"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/verify/tags?page=2&limit=50"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/news/tags?limit=30"
+```
+
+ตัวอย่างกรองด้วย `slug` หรือ `id`:
+
+```bash
+curl "https://api.thaipbs.net/v1/decode/tags?slug=ai"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/now/tags?id=1"
+```
+
+### `GET /v1/:site/tags/:id`
+
+ดึง tag รายการเดียวด้วย path param
+
+- `:id` รับเป็นได้ทั้ง **id ตัวเลข** หรือ **slug**
+- ถ้า `:id` เป็นตัวเลข ระบบจะลองหาด้วย `id` ก่อน, หากไม่เจอจะลองตีความเป็น `slug` ให้อัตโนมัติ
+- ถ้าไม่เป็นตัวเลขจะถือว่าเป็น `slug` ตรง ๆ
+
+#### Response
+
+- ถ้าเจอ → ตอบกลับเป็น object ของ tag รายการเดียว `{ id, title, slug, canonical }`
+- ถ้าไม่เจอ → `404 { "message": "Tag not found" }`
+
+#### Example
+
+```bash
+curl "https://api.thaipbs.net/v1/verify/tags/3000"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/theactive/tags/climate"
+```
+
+```bash
+curl "https://api.thaipbs.net/v1/now/tags/Facebook"
+```
 
