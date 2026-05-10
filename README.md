@@ -364,6 +364,72 @@ curl "https://api.thaipbs.net/v1/policywatch/posts/38608?type=article"
 
 ---
 
+## 2.1) News gallery
+
+แกลอรี่ภาพภายใต้ **`/v1/news/gallery`** แยกจาก `GET /v1/news/posts` — ใช้สำหรับลิสต์แกลอรี่ กรองหมวด และดึงรายละเอียดพร้อมรูปหลายใบ
+
+> ใน response ระบบจะตั้ง **`restUrl`** ให้ชี้มาที่ API นี้ (ลิสต์และรายละเอียดแกลอรี่) และในรายละเอียดจะตั้ง **`relatedNews[].restUrl`** ของโพสต์ข่าวให้เป็น `GET /v1/news/posts/:id`
+
+### `GET /v1/news/gallery/categories`
+
+รวมหมวดแกลอรี่ที่พบจากการไล่รายการแกลอรี่ (pagination `page` + `limit=100` ต่อหน้า สูงสุด 20 หน้า) แล้ว dedupe ตาม `categoryId`
+
+#### Response
+
+- `minTs`: unix timestamp
+- `total`: จำนวนหมวด
+- `data`: array ของ `{ "id", "title", "slug", "url" }`
+  - `id`: string (รหัสหมวด) — ใช้กับ `categoryId` ใน `GET /v1/news/gallery`
+  - `slug`: slug ภาษาอังกฤษของหมวด (ถ้ามี)
+  - `url`: path สำเร็จรูปไปลิสต์แกลอรี่ในหมวดนั้น เช่น `/v1/news/gallery?categoryId=...`
+
+#### Example
+
+```bash
+curl "https://api.thaipbs.net/v1/news/gallery/categories"
+```
+
+### `GET /v1/news/gallery`
+
+ดึงรายการแกลอรี่ รองรับการโหลดเพิ่มและกรองหมวด
+
+#### Query params
+
+- `categoryId` (optional, string) — กรองหมวดแกลอรี่ เช่น `6828b35a5b95c43d673475e5`
+- `lastId` หรือ `lastid` (optional) — ใช้โหลดเพิ่ม (load more)
+- `limit` (optional) — จำนวนรายการต่อครั้ง (เช่น `10`, `50`, `100`)
+- `page` (optional, integer) — แบ่งหน้า (เช่น `page=2` ใช้คู่กับ `limit`)
+
+#### Response
+
+มีฟิลด์เช่น `minTs`, `currentTime`, `currentCategory`, `currentCategoryId`, `total`, `items` แต่ละ element ใน `items` จะมี **`restUrl`** เป็น path ภายใน API นี้: `/v1/news/gallery/{id}`
+
+#### Example
+
+```bash
+curl "https://api.thaipbs.net/v1/news/gallery?limit=20"
+curl "https://api.thaipbs.net/v1/news/gallery?categoryId=6828b35a5b95c43d673475e5&lastId=331&limit=50"
+curl "https://api.thaipbs.net/v1/news/gallery?page=2&limit=20"
+```
+
+### `GET /v1/news/gallery/:id`
+
+ดึงรายละเอียดแกลอรี่หนึ่งชุด (เนื้อหา intro, รูปใน `items`, แท็ก, `relatedNews` ฯลฯ)
+
+#### Response
+
+- โครงสร้าง JSON ตามข้อมูลแกลอรี่ (หัวข้อ เนื้อหา รูป แท็ก ข่าวที่เกี่ยวข้อง ฯลฯ)
+- เพิ่ม/แทนที่ **`restUrl`** ระดับ root เป็น `/v1/news/gallery/{id}`
+- **`relatedNews`**: แต่ละรายการที่เป็นโพสต์ข่าวจะได้ `restUrl` เป็น `/v1/news/posts/{id}`
+
+#### Example
+
+```bash
+curl "https://api.thaipbs.net/v1/news/gallery/1251"
+```
+
+---
+
 ## 3) Policywatch Policies (special)
 
 ### `GET /v1/policywatch/policies`
